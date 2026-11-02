@@ -1,8 +1,38 @@
-import os
-import httpx
+from datetime import datetime, timezone
 from google.adk.tools import ToolContext
+from sqlalchemy import text
 
-BASE_URL = os.getenv("API_BASE_URL", "http://localhost:8001").rstrip("/")
+from miniproject.connections.db import engine
+from miniproject.auth.auth import verify_token
+
+
+def _get_owner_and_library_id(tool_context: ToolContext, library_id: int | None = None) -> tuple[int, int]:
+    """Helper to extract authenticated owner_id and active library_id."""
+    token = tool_context.state.get("access_token")
+    if not token:
+        raise ValueError("Authentication token is missing. Please log in first.")
+
+    payload = verify_token(token)
+    owner_id = int(payload["sub"])
+
+    with engine.connect() as conn:
+        if library_id is not None:
+            lib = conn.execute(
+                text("SELECT id FROM libraries WHERE id = :lib_id AND owner_id = :owner_id"),
+                {"lib_id": library_id, "owner_id": owner_id},
+            ).first()
+            if not lib:
+                raise ValueError(f"Library ID {library_id} not found for this account.")
+            return owner_id, library_id
+
+        # Automatically use owner's primary library if library_id is omitted
+        lib = conn.execute(
+            text("SELECT id FROM libraries WHERE owner_id = :owner_id ORDER BY id ASC LIMIT 1"),
+            {"owner_id": owner_id},
+        ).first()
+        if not lib:
+            raise ValueError("No library found. Please create a library first.")
+        return owner_id, lib[0]
 
 
 async def get_all_students(
@@ -10,27 +40,31 @@ async def get_all_students(
     library_id: int | None = None,
 ) -> dict:
     """Fetch all students from the system, optionally filtered by library_id."""
-    token = tool_context.state.get("access_token")
-    if not token:
-        return {"error": "Authentication token is missing."}
+    try:
+        owner_id, lib_id = _get_owner_and_library_id(tool_context, library_id)
+        with engine.connect() as conn:
+            rows = conn.execute(
+                text("""
+                    SELECT id, name, email, phone, address, library_id, alumini,
+                           status, payment_start_month, last_payment_date
+                    FROM students
+                    WHERE owner_id = :owner_id AND library_id = :lib_id
+                    ORDER BY id DESC
+                """),
+                {"owner_id": owner_id, "lib_id": lib_id},
+            ).mappings().all()
 
-    params = {}
-    if library_id is not None:
-        params["library_id"] = library_id
+        students = [dict(r) for r in rows]
+        # Format date fields for clean JSON serialization
+        for s in students:
+            if s.get("payment_start_month"):
+                s["payment_start_month"] = str(s["payment_start_month"])
+            if s.get("last_payment_date"):
+                s["last_payment_date"] = str(s["last_payment_date"])
 
-    async with httpx.AsyncClient() as client:
-        response = await client.get(
-            f"{BASE_URL}/getallstudents",
-            params=params,
-            headers={"Authorization": f"Bearer {token}"},
-            timeout=10.0,
-        )
-
-    if response.status_code == 401:
-        return {"error": "Authentication failed or token expired."}
-
-    response.raise_for_status()
-    return response.json()
+        return {"count": len(students), "students": students}
+    except Exception as e:
+        return {"error": str(e)}
 
 
 async def get_student(
@@ -39,37 +73,38 @@ async def get_student(
     library_id: int | None = None,
 ) -> dict:
     """Fetch a single student by student_id."""
-    token = tool_context.state.get("access_token")
-    if not token:
-        return {"error": "Authentication token is missing."}
+    try:
+        owner_id, lib_id = _get_owner_and_library_id(tool_context, library_id)
+        with engine.connect() as conn:
+            row = conn.execute(
+                text("""
+                    SELECT id, name, email, phone, address, library_id, alumini,
+                           status, payment_start_month, last_payment_date
+                    FROM students
+                    WHERE id = :student_id AND owner_id = :owner_id AND library_id = :lib_id
+                """),
+                {"student_id": student_id, "owner_id": owner_id, "lib_id": lib_id},
+            ).mappings().first()
 
-    params = {}
-    if library_id is not None:
-        params["library_id"] = library_id
+        if not row:
+            return {"error": f"Student with ID {student_id} not found."}
 
-    async with httpx.AsyncClient() as client:
-        response = await client.get(
-            f"{BASE_URL}/students/{student_id}",
-            params=params,
-            headers={"Authorization": f"Bearer {token}"},
-            timeout=10.0,
-        )
-    if response.status_code == 422:
-        print("Validation error:", response.json())
+        data = dict(row)
+        if data.get("payment_start_month"):
+            data["payment_start_month"] = str(data["payment_start_month"])
+        if data.get("last_payment_date"):
+            data["last_payment_date"] = str(data["last_payment_date"])
 
-    response.raise_for_status()
-    if response.status_code == 401:
-        return {"error": "Authentication failed or token expired."}
-
-    response.raise_for_status()
-    return response.json()
+        return {"student": data}
+    except Exception as e:
+        return {"error": str(e)}
 
 
 async def add_student(
     tool_context: ToolContext,
     name: str,
     phone: str,
-    library_id: int,
+    library_id: int | None = None,
     email: str | None = None,
     address: str | None = None,
     payment_start_month: str | None = None,
@@ -80,45 +115,63 @@ async def add_student(
     Args:
         tool_context: Context containing the authenticated user's state.
         name: Student's full name.
-        phone: Student's phone number, passed as a string.
-        library_id: Integer ID of the library where the student will register.
+        phone: Student's phone number.
+        library_id: Optional integer ID of the library (defaults to owner's library).
         email: Student's email address, if provided.
         address: Student's address, if provided.
-        payment_start_month: Payment start date in YYYY-MM-DD format,
-            if provided.
+        payment_start_month: Payment start date in YYYY-MM-DD format, if provided.
     """
-    token = tool_context.state.get("access_token")
-    if not token:
-        return {"error": "Authentication token is missing."}
+    try:
+        owner_id, lib_id = _get_owner_and_library_id(tool_context, library_id)
 
-    payload = {
-        "name": name,
-        "phone": phone,
-        "library_id": library_id,
-        "email": email,
-        "address": address,
-        "payment_start_month": payment_start_month,
-    }
+        with engine.begin() as conn:
+            if email and email.strip():
+                existing = conn.execute(
+                    text("""
+                        SELECT id FROM students 
+                        WHERE owner_id = :owner_id AND LOWER(email) = LOWER(:email)
+                    """),
+                    {"owner_id": owner_id, "email": email.strip()},
+                ).first()
+                if existing:
+                    return {"error": f"Student with email '{email}' already exists."}
 
-    async with httpx.AsyncClient() as client:
-        response = await client.post(
-            f"{BASE_URL}/createaccount/addstudent",
-            json=payload,
-            headers={"Authorization": f"Bearer {token}"},
-            timeout=10.0,
-        )
+            result = conn.execute(
+                text("""
+                    INSERT INTO students (
+                        owner_id, library_id, name, email, phone, address,
+                        payment_start_month, last_payment_date, status, alumini
+                    )
+                    VALUES (
+                        :owner_id, :library_id, :name, :email, :phone, :address,
+                        :payment_start_month, CURRENT_DATE, 'Active', false
+                    )
+                    RETURNING id, name, email, phone, library_id
+                """),
+                {
+                    "owner_id": owner_id,
+                    "library_id": lib_id,
+                    "name": name.strip(),
+                    "email": email.strip() if email else None,
+                    "phone": phone.strip(),
+                    "address": address.strip() if address else None,
+                    "payment_start_month": payment_start_month.strip() if payment_start_month else None,
+                },
+            ).mappings().first()
 
-    if response.status_code == 401:
-        return {"error": "Authentication failed or token expired."}
-
-    response.raise_for_status()
-    return response.json()
+        return {
+            "success": True,
+            "message": f"Student '{name}' registered successfully.",
+            "student": dict(result),
+        }
+    except Exception as e:
+        return {"error": str(e)}
 
 
 async def update_student(
     tool_context: ToolContext,
     student_id: int,
-    library_id: int,
+    library_id: int | None = None,
     name: str | None = None,
     phone: str | None = None,
     email: str | None = None,
@@ -127,60 +180,69 @@ async def update_student(
     alumini: bool | None = None,
 ) -> dict:
     """Update student information."""
-    token = tool_context.state.get("access_token")
-    if not token:
-        return {"error": "Authentication token is missing."}
+    try:
+        owner_id, lib_id = _get_owner_and_library_id(tool_context, library_id)
 
-    payload = {}
-    if name is not None:
-        payload["name"] = name
-    if phone is not None:
-        payload["phone"] = phone
-    if email is not None:
-        payload["email"] = email
-    if address is not None:
-        payload["address"] = address
-    if status is not None:
-        payload["status"] = status
-    if alumini is not None:
-        payload["alumini"] = alumini
+        update_fields = []
+        params = {"student_id": student_id, "owner_id": owner_id, "lib_id": lib_id}
 
-    async with httpx.AsyncClient() as client:
-        response = await client.patch(
-            f"{BASE_URL}/students/{student_id}",
-            params={"library_id": library_id},
-            json=payload,
-            headers={"Authorization": f"Bearer {token}"},
-            timeout=10.0,
-        )
+        if name is not None:
+            update_fields.append("name = :name")
+            params["name"] = name.strip()
+        if phone is not None:
+            update_fields.append("phone = :phone")
+            params["phone"] = phone.strip()
+        if email is not None:
+            update_fields.append("email = :email")
+            params["email"] = email.strip()
+        if address is not None:
+            update_fields.append("address = :address")
+            params["address"] = address.strip()
+        if status is not None:
+            update_fields.append("status = :status")
+            params["status"] = status.strip()
+        if alumini is not None:
+            update_fields.append("alumini = :alumini")
+            params["alumini"] = alumini
 
-    if response.status_code == 401:
-        return {"error": "Authentication failed or token expired."}
+        if not update_fields:
+            return {"error": "No update fields provided."}
 
-    response.raise_for_status()
-    return response.json()
+        with engine.begin() as conn:
+            sql = f"""
+                UPDATE students
+                SET {", ".join(update_fields)}
+                WHERE id = :student_id AND owner_id = :owner_id AND library_id = :lib_id
+            """
+            result = conn.execute(text(sql), params)
+            if result.rowcount == 0:
+                return {"error": f"Student ID {student_id} not found."}
+
+        return {"success": True, "message": f"Student ID {student_id} updated successfully."}
+    except Exception as e:
+        return {"error": str(e)}
 
 
 async def delete_student(
     tool_context: ToolContext,
     student_id: int,
-    library_id: int,
+    library_id: int | None = None,
 ) -> dict:
     """Delete a student by student_id from a library."""
-    token = tool_context.state.get("access_token")
-    if not token:
-        return {"error": "Authentication token is missing."}
+    try:
+        owner_id, lib_id = _get_owner_and_library_id(tool_context, library_id)
 
-    async with httpx.AsyncClient() as client:
-        response = await client.delete(
-            f"{BASE_URL}/students/{student_id}",
-            params={"library_id": library_id},
-            headers={"Authorization": f"Bearer {token}"},
-            timeout=10.0,
-        )
+        with engine.begin() as conn:
+            result = conn.execute(
+                text("""
+                    DELETE FROM students
+                    WHERE id = :student_id AND owner_id = :owner_id AND library_id = :lib_id
+                """),
+                {"student_id": student_id, "owner_id": owner_id, "lib_id": lib_id},
+            )
+            if result.rowcount == 0:
+                return {"error": f"Student ID {student_id} not found."}
 
-    if response.status_code == 401:
-        return {"error": "Authentication failed or token expired."}
-
-    response.raise_for_status()
-    return response.json()
+        return {"success": True, "message": f"Student ID {student_id} deleted successfully."}
+    except Exception as e:
+        return {"error": str(e)}

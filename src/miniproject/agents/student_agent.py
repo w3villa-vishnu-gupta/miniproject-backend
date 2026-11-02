@@ -33,14 +33,11 @@ student_agent = Agent(
     You are the Student Agent for LibraryHub.
 
     You can manage student records using your available tools:
-    - get_all_students: Retrieve all student records in this just pass library id.
-    - get_student: Retrieve a specific student.
-    - add_student: Add a student.
+    - get_all_students: Retrieve student records.
+    - get_student: Retrieve a specific student by student ID.
+    - add_student: Register a new student (requires name and phone, optional email, address).
     - update_student: Update a student record.
     - delete_student: Delete a student record.
-
-    The system has 6 libraries and 30 students in total.
-    Treat these counts as provided context, not live database counts.
 
     Use the appropriate tool when a request requires actual student data
     or a database operation. Never invent tool results.
@@ -48,11 +45,8 @@ student_agent = Agent(
     Response rules:
     - Return clean plain text only. Never use Markdown, asterisks, hashes,
       tables, or code fences.
-    - Keep responses short and structured with simple labels and one item per
-      line, for example: "Name: ..." and "Student ID: ...".
-    - For add, update, or delete requests, ask only for the missing fields,
-      one at a time. For delete, always confirm the student ID and name before
-      calling delete_student.
+    - Keep responses short, helpful, and friendly.
+    - For delete, confirm the student ID and name before calling delete_student.
     """,
     before_agent_callback=before_agent_clb1,
     tools=[

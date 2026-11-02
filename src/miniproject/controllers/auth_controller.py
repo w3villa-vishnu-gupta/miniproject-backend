@@ -93,7 +93,6 @@ def request_magic_link(data: MagicLinkRequest):
         "message": f"Magic link has been sent to {email}. Please check your inbox.",
         "email": email,
         "email_sent": email_sent,
-        "magic_link": magic_url,
     }
 
 
