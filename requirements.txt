@@ -104,7 +104,6 @@ marshmallow==3.26.2
 mcp==2.3.0
 mcp-types==2.3.0
 mdurl==0.1.2
--e file:///home/vaibhav/Desktop/mini-complete/miniproject
 multidict==7.2.1
 mypy-extensions==1.1.0
 nest-asyncio==1.6.0
