@@ -33,7 +33,7 @@ GOOGLE_CALLBACK_URL = os.getenv(
     "GOOGLE_CALLBACK_URL",
     "http://localhost:8001/auth/google/callback",
 )
-FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:5173/").rstrip("/")
+FRONTEND_URL = os.getenv("FRONTEND_URL", "https://library-hub-w3villa.vercel.app").rstrip("/")
 
 
 def generate_code_challenge(verifier: str) -> str:

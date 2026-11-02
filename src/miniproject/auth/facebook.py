@@ -24,7 +24,7 @@ FACEBOOK_CALLBACK_URL = os.getenv(
     "FACEBOOK_CALLBACK_URL",
     "http://localhost:8001/auth/facebook/callback",
 )
-FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:5173/").rstrip("/")
+FRONTEND_URL = os.getenv("FRONTEND_URL", "https://library-hub-w3villa.vercel.app").rstrip("/")
 
 FACEBOOK_AUTHORIZE_URL = "https://www.facebook.com/v24.0/dialog/oauth"
 FACEBOOK_TOKEN_URL = "https://graph.facebook.com/v24.0/oauth/access_token"

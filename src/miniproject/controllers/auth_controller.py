@@ -78,7 +78,7 @@ def request_magic_link(data: MagicLinkRequest):
         "password_hash": hashed_password,
     })
 
-    frontend_url = os.getenv("FRONTEND_URL", "http://localhost:5173/").rstrip("/")
+    frontend_url = os.getenv("FRONTEND_URL", "https://library-hub-w3villa.vercel.app").rstrip("/")
     magic_url = f"{frontend_url}/auth/magic-callback?token={token}"
 
     email_sent = send_magic_link_email(
@@ -189,13 +189,15 @@ def direct_magic_callback(token: str):
             name=(owner["name"] if owner else payload.get("name")) or "",
             method="Magic Link",
         )
+        frontend_url = os.getenv("FRONTEND_URL", "https://library-hub-w3villa.vercel.app").rstrip("/")
         return RedirectResponse(
-            url=f"http://localhost:5173/create-library?access_token={access_token}",
+            url=f"{frontend_url}/create-library?access_token={access_token}",
             status_code=302,
         )
     except Exception as e:
+        frontend_url = os.getenv("FRONTEND_URL", "https://library-hub-w3villa.vercel.app").rstrip("/")
         return RedirectResponse(
-            url=f"http://localhost:5173/login?error={quote(str(e))}",
+            url=f"{frontend_url}/login?error={quote(str(e))}",
             status_code=302,
         )
 
