@@ -1,0 +1,11 @@
+CREATE TABLE IF NOT EXISTS book_assignments (
+    id SERIAL PRIMARY KEY,
+    owner_id INTEGER REFERENCES owners(id) ON DELETE CASCADE,
+    library_id INTEGER REFERENCES libraries(id) ON DELETE CASCADE,
+    book_id INTEGER REFERENCES books(id) ON DELETE CASCADE,
+    student_id INTEGER REFERENCES students(id) ON DELETE CASCADE,
+    assigned_date VARCHAR(50) NOT NULL,
+    return_date VARCHAR(50) NOT NULL,
+    status VARCHAR(50) NOT NULL DEFAULT 'issued',
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);

@@ -1,0 +1,6 @@
+-- Add location columns to owners table
+ALTER TABLE owners 
+ADD COLUMN IF NOT EXISTS address TEXT,
+ADD COLUMN IF NOT EXISTS latitude DOUBLE PRECISION,
+ADD COLUMN IF NOT EXISTS longitude DOUBLE PRECISION,
+ADD COLUMN IF NOT EXISTS userlocation TEXT;

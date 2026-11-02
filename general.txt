@@ -1,0 +1,16 @@
+src/miniproject/
+├── auth/
+├── connections/
+├── controllers/
+├── routers/
+│   └── chat.py             # New /chat API
+├── schemas/
+├── services/
+├── agents/                 # New: ADK agents
+│   ├── root_agent.py
+│   ├── book_agent.py
+│   └── student_agent.py
+├── tools/                  # New: agent tools
+├── skills/                 # New: SKILL.md files
+├── sessions.py             # ADK session service + Runner
+└── main.py                 # Existing entry point

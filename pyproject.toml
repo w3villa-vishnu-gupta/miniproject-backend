@@ -1,0 +1,29 @@
+[project]
+name = "miniproject"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+authors = [
+    { name = "Vaibhav Mishra", email = "vaibhav.mishra@w3villa.com" }
+]
+requires-python = ">=3.13"
+dependencies = [
+    "apscheduler<4",
+    "fastapi[standard]>=0.143.0",
+    "google-adk[extensions]>=1.18.0",
+    "httpx>=0.28.1",
+    "mcp>=2.3.0",
+    "psycopg[binary]>=3.3.6",
+    "pwdlib[argon2]>=0.3.1",
+    "pydantic-settings>=2.15.0",
+    "pyjwt>=2.15.1",
+    "python-dotenv>=1.2.4",
+    "sqlalchemy>=2.1.4",
+]
+
+[project.scripts]
+miniproject = "miniproject:main"
+
+[build-system]
+requires = ["uv_build>=0.13.0,<0.14.0"]
+build-backend = "uv_build"

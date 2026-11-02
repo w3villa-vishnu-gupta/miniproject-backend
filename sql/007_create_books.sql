@@ -1,0 +1,12 @@
+CREATE TABLE IF NOT EXISTS books (
+    id SERIAL PRIMARY KEY,
+    owner_id INTEGER REFERENCES owners(id) ON DELETE CASCADE,
+    library_id INTEGER REFERENCES libraries(id) ON DELETE CASCADE,
+    title VARCHAR(255) NOT NULL,
+    author VARCHAR(255) NOT NULL,
+    category VARCHAR(100) NOT NULL,
+    copies INTEGER NOT NULL DEFAULT 1,
+    status VARCHAR(50) NOT NULL DEFAULT 'Available',
+    description TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
