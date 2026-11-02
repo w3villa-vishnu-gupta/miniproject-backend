@@ -40,12 +40,13 @@ origins = [
     "http://localhost:8000",
     "http://127.0.0.1:8000",
     "http://localhost",
+    "https://library-hub-w3villa.vercel.app",
 ]
 
 # Session Middleware
 app.add_middleware(
     SessionMiddleware,
-    secret_key=os.environ.get("SESSION_SECRET"),
+    secret_key=os.environ.get("SESSION_SECRET", "supersecret-session-key"),
     same_site="lax",
     https_only=False
 )
@@ -54,7 +55,7 @@ app.add_middleware(
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
-    allow_origin_regex=r"https?://(localhost|127\.0\.0\.1)(:\d+)?",
+    allow_origin_regex=r"https?://(localhost|127\.0\.0\.1)(:\d+)?|https://.*\.vercel\.app",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"]
