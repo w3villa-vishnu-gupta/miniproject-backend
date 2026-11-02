@@ -49,16 +49,11 @@ async def chat(
         )
 
         try:
-            async with httpx.AsyncClient(timeout=20.0) as client:
-                result = await client.get(
-                    "http://localhost:8001/create-session-title/"
-                    f"{user_id}/{session.id}/{quote(message, safe='')}",
-                    timeout=60.0,
-                )
-                result.raise_for_status()
-
-        except httpx.HTTPError as e:
-            print(f"Title generation failed: {e}")
+            import asyncio
+            from miniproject.controllers.chat_controller import generate_title_background
+            asyncio.create_task(generate_title_background(str(user_id), str(session.id), message))
+        except Exception as e:
+            print(f"Title generation background task failed: {e}")
 
     else:
         print("Session found.")

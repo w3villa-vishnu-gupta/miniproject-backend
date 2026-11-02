@@ -112,46 +112,96 @@ async def get_chat_history(user_id: str, session_id: str):
     }
 
 
+async def generate_title_background(userid: str, sessionid: str, message: str):
+    velona_key = os.getenv("VELONA_API_KEY", "")
+    if not velona_key:
+        return
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            response = await client.post(
+                "https://velona.in/gateway/v1/inference/run",
+                headers={"Authorization": f"Bearer {velona_key}"},
+                json={
+                    "model": "deepseek/deepseek-chat",
+                    "turns": [
+                        {"role": "system", "content": "Generate a title in 3-5 words. Output only the title."},
+                        {"role": "user", "content": message}
+                    ],
+                    "max_tokens": 12
+                },
+            )
+            if response.status_code == 200:
+                data = response.json()
+                title = data.get("data", {}).get("output", "").strip() or "New Chat"
+                try:
+                    numeric_uid = int(userid)
+                except Exception:
+                    numeric_uid = 1
+                with engine.begin() as conn:
+                    conn.execute(
+                        text("""
+                            INSERT INTO session_title (user_id, session_id, title)
+                            VALUES (:user_id, :session_id, :title)
+                            ON CONFLICT DO NOTHING
+                        """),
+                        {
+                            "user_id": numeric_uid,
+                            "session_id": sessionid,
+                            "title": title,
+                        }
+                    )
+    except Exception as e:
+        print(f"Background title generation error: {e}")
+
+
 @router.get("/create-session-title/{userid}/{sessionid}/{message}")
-def create_session_title(userid: int, sessionid: str, message: str):
+async def create_session_title(userid: str, sessionid: str, message: str):
     if userid is None or sessionid is None or message is None:
         raise HTTPException(status_code=400, detail="Invalid request")
 
     velona_key = os.getenv("VELONA_API_KEY", "")
-    response = httpx.post(
-        "https://velona.in/gateway/v1/inference/run",
-        headers={"Authorization": f"Bearer {velona_key}"},
-        json={
-            "model": "deepseek/deepseek-chat",
-            "turns": [
-                {"role": "system", "content": "Generate a title in 3-5 words. Output only the title."},
-                {"role": "user", "content": message}
-            ],
-            "max_tokens": 12
-        },
-        timeout=15
-    )
-
-    if response.status_code == 200:
-        title = response.json()["data"]["output"].strip()
-
-        with engine.begin() as session:
-            session.execute(
-                text("""
-                    INSERT INTO session_title (user_id, session_id, title)
-                    VALUES (:user_id, :session_id, :title)
-                """),
-                {
-                    "user_id": userid,
-                    "session_id": sessionid,
-                    "title": title,
-                }
+    try:
+        async with httpx.AsyncClient(timeout=15) as client:
+            response = await client.post(
+                "https://velona.in/gateway/v1/inference/run",
+                headers={"Authorization": f"Bearer {velona_key}"},
+                json={
+                    "model": "deepseek/deepseek-chat",
+                    "turns": [
+                        {"role": "system", "content": "Generate a title in 3-5 words. Output only the title."},
+                        {"role": "user", "content": message}
+                    ],
+                    "max_tokens": 12
+                },
             )
 
-        return {"title": title}
+        if response.status_code == 200:
+            data = response.json()
+            title = data.get("data", {}).get("output", "").strip() or "Chat"
+            try:
+                numeric_uid = int(userid)
+            except Exception:
+                numeric_uid = 1
 
-    else:
-        raise HTTPException(status_code=500, detail="Internal server error")
+            with engine.begin() as session:
+                session.execute(
+                    text("""
+                        INSERT INTO session_title (user_id, session_id, title)
+                        VALUES (:user_id, :session_id, :title)
+                        ON CONFLICT DO NOTHING
+                    """),
+                    {
+                        "user_id": numeric_uid,
+                        "session_id": sessionid,
+                        "title": title,
+                    }
+                )
+
+            return {"title": title}
+    except Exception as e:
+        print(f"Title generation error: {e}")
+
+    return {"title": "New Chat"}
 
 
 @router.post("/get-titles")
