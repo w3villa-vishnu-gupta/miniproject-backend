@@ -27,14 +27,16 @@ async def my_cron_job():
 
 
 def start_scheduler():
-    scheduler.add_job(
-        my_cron_job,
-        IntervalTrigger(seconds=5453),
-        id="daily_job",
-        replace_existing=True
-    )
+    if not scheduler.running:
+        scheduler.add_job(
+            my_cron_job,
+            IntervalTrigger(seconds=5453),
+            id="daily_job",
+            replace_existing=True
+        )
+        scheduler.start()
 
-    scheduler.start()
 
 def stop_scheduler():
-    scheduler.shutdown(wait=False)
+    if scheduler.running:
+        scheduler.shutdown(wait=False)

@@ -1,4 +1,5 @@
 import os
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from pwdlib import PasswordHash
@@ -14,7 +15,20 @@ from miniproject.controllers.scheduler import (
 )
 
 
-app = FastAPI()
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    try:
+        start_scheduler()
+    except Exception as e:
+        print(f"[Scheduler Warning] Could not start scheduler: {e}")
+    yield
+    try:
+        stop_scheduler()
+    except Exception as e:
+        print(f"[Scheduler Warning] Could not stop scheduler: {e}")
+
+
+app = FastAPI(lifespan=lifespan)
 
 password_hash = PasswordHash.recommended()
 
@@ -35,8 +49,6 @@ app.add_middleware(
     same_site="lax",
     https_only=False
 )
-
-start_scheduler()
 
 # CORS Middleware
 app.add_middleware(
