@@ -21,6 +21,3 @@ This is the initial development release of LibraryHub, a multi-tenant library ma
 - **Configuration:** Runtime configuration is managed through environment variables. Set the required database, authentication, OAuth, email, and AI-provider credentials in the deployment environment. Do not commit secrets.
 - **Frontend:** Maintained separately in the `miniproject-frontend-` repository.
 
-### Notes
-
-This is an early development release. Configure the required environment variables and database schema before deployment. Verify OAuth providers, email delivery, payment configuration, and production database permissions in the target environment before enabling those flows for end users.
