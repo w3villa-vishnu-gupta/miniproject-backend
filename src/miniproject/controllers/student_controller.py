@@ -71,6 +71,10 @@ def addstudent(
 @router.get("/getallstudents")
 def get_all_students(
     library_id: int | None = None,
+    page: int | None = None,
+    limit: int = 10,
+    search: str | None = None,
+    alumini: bool | None = None,
     current_owner: dict = Depends(get_current_owner),
 ):
     owner_id = current_owner["owner_id"]
@@ -91,19 +95,85 @@ def get_all_students(
                     detail="Library not found for this owner",
                 )
 
-        result = connection.execute(
-            text("""
+        where_clauses = ["students.owner_id = :owner_id"]
+        params: dict = {"owner_id": owner_id}
+
+        if library_id is not None:
+            where_clauses.append("students.library_id = :library_id")
+            params["library_id"] = library_id
+
+        if alumini is True:
+            where_clauses.append("students.alumini = TRUE")
+        elif alumini is False:
+            where_clauses.append("(students.alumini IS NULL OR students.alumini = FALSE)")
+
+        if search and search.strip():
+            where_clauses.append(
+                "("
+                "students.name ILIKE :search "
+                "OR COALESCE(students.email, '') ILIKE :search "
+                "OR COALESCE(students.phone, '') ILIKE :search "
+                "OR COALESCE(students.address, '') ILIKE :search "
+                "OR COALESCE(students.status, '') ILIKE :search"
+                ")"
+            )
+            params["search"] = f"%{search.strip()}%"
+
+        where_sql = " AND ".join(where_clauses)
+
+        # Backwards-compatible: return plain list if page is not specified
+        if page is None:
+            result = connection.execute(
+                text(f"""
+                    SELECT students.id, students.name, students.email, students.phone,
+                           students.address, students.library_id, students.alumini,
+                           students.status, students.payment_start_month,
+                           students.last_payment_date
+                    FROM students
+                    WHERE {where_sql}
+                    ORDER BY students.id DESC
+                """),
+                params,
+            )
+            return result.mappings().all()
+
+        # Server-side pagination when page is specified
+        page = max(1, page)
+        limit = max(1, min(100, limit))
+        offset = (page - 1) * limit
+
+        total = connection.execute(
+            text(f"SELECT COUNT(*) FROM students WHERE {where_sql}"),
+            params,
+        ).scalar_one()
+
+        total_pages = max(1, (total + limit - 1) // limit)
+        if page > total_pages:
+            page = total_pages
+            offset = (page - 1) * limit
+
+        paginated_params = {**params, "limit": limit, "offset": offset}
+        rows = connection.execute(
+            text(f"""
                 SELECT students.id, students.name, students.email, students.phone,
                        students.address, students.library_id, students.alumini,
                        students.status, students.payment_start_month,
                        students.last_payment_date
                 FROM students
-                WHERE students.owner_id = :owner_id
-                  AND (:library_id IS NULL OR students.library_id = :library_id)
+                WHERE {where_sql}
+                ORDER BY students.id DESC
+                LIMIT :limit OFFSET :offset
             """),
-            {"owner_id": owner_id, "library_id": library_id},
-        )
-        return result.mappings().all()
+            paginated_params,
+        ).mappings().all()
+
+        return {
+            "students": [dict(r) for r in rows],
+            "total": total,
+            "page": page,
+            "limit": limit,
+            "total_pages": total_pages,
+        }
 
 
 @router.patch("/students/{student_id}")
